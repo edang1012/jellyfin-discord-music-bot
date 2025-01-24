@@ -70,6 +70,7 @@ export class DiscordVoiceService implements OnModuleDestroy {
       },
     );
     this.playResource(resource);
+    this.audioResource.volume.setVolume(0.1);
   }
 
   tryJoinChannelAndEstablishVoiceConnection(
