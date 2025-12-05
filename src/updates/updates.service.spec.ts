@@ -1,63 +1,47 @@
 import { Test } from '@nestjs/testing';
 import axios from 'axios';
-import { Client, GuildMember } from 'discord.js';
+import { GuildMember } from 'discord.js';
 import { Constants } from '../utils/constants';
-import { DiscordMessageService } from '../clients/discord/discord.message.service';
 import { GithubRelease } from '../models/GithubRelease';
-import { useDefaultMockerToken } from '../utils/tests/defaultMockerToken';
 import { UpdatesService } from './updates.service';
-import { InjectionToken } from '@nestjs/common';
+import { vitest } from 'vitest';
 
 // mock axios: https://stackoverflow.com/questions/51275434/type-of-axios-mock-using-jest-typescript/55351900#55351900
-jest.mock('axios');
-const mockedAxios = axios as jest.MockedFunction<typeof axios>;
+vitest.mock('axios');
+const mockedAxios = axios as vitest.MockedFunction<typeof axios>;
 
 describe('UpdatesService', () => {
   const OLD_ENV = process.env;
 
   let updatesService: UpdatesService;
-  let discordMessageService: DiscordMessageService;
 
   beforeEach(async () => {
-    jest.resetModules();
+    vitest.resetModules();
     process.env = { ...OLD_ENV };
 
     const moduleRef = await Test.createTestingModule({
-      providers: [UpdatesService],
-    })
-      .useMocker((token) => {
-        if (token === DiscordMessageService) {
-          return {
-            client: jest.fn().mockReturnValue({}),
-            buildMessage: jest.fn(),
-            buildErrorMessage: jest.fn(),
-          } as DiscordMessageService;
-        }
-
-        if (token === Client || token === '__inject_discord_client__') {
-          return {
+      providers: [
+        UpdatesService,
+        {
+          provide: '__inject_discord_client__',
+          useValue: {
             guilds: {
               cache: [
                 {
                   fetchOwner: () =>
                     ({
-                      send: jest.fn(),
+                      send: vitest.fn(),
                       user: { tag: 'test' },
                     }) as unknown as GuildMember,
                 },
               ],
             },
-          };
-        }
-
-        return useDefaultMockerToken(token as InjectionToken);
-      })
-      .compile();
+          },
+        },
+      ],
+    }).compile();
 
     updatesService = moduleRef.get<UpdatesService>(UpdatesService);
-    discordMessageService = moduleRef.get<DiscordMessageService>(
-      DiscordMessageService,
-    );
   });
 
   afterAll(() => {
@@ -82,8 +66,6 @@ describe('UpdatesService', () => {
     await updatesService.handleCron();
 
     expect(mockedAxios).not.toHaveBeenCalled();
-    expect(discordMessageService.buildMessage).not.toHaveBeenCalled();
-    expect(discordMessageService.buildErrorMessage).not.toHaveBeenCalled();
   });
 
   it('handleCronShouldNotifyWhenNewRelease', async () => {
@@ -111,6 +93,5 @@ describe('UpdatesService', () => {
     await updatesService.handleCron();
 
     expect(mockedAxios).toHaveBeenCalled();
-    expect(discordMessageService.buildMessage).toHaveBeenCalled();
   });
 });

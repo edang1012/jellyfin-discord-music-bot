@@ -20,7 +20,6 @@ import { Interval } from '@nestjs/schedule';
 import {
   GuildMember,
   InteractionEditReplyOptions,
-  InteractionReplyOptions,
   MessagePayload,
   VoiceChannel,
 } from 'discord.js';
@@ -31,7 +30,7 @@ import { PlaybackService } from '../../playback/playback.service';
 import { JellyfinStreamBuilderService } from '../jellyfin/jellyfin.stream.builder.service';
 import { JellyfinWebSocketService } from '../jellyfin/jellyfin.websocket.service';
 
-import { DiscordMessageService } from './discord.message.service';
+import { buildErrorMessage, buildMessage } from './discord.message.builder';
 
 @Injectable()
 export class DiscordVoiceService implements OnModuleDestroy {
@@ -42,7 +41,6 @@ export class DiscordVoiceService implements OnModuleDestroy {
   private autoLeaveIntervalId: NodeJS.Timeout | null = null;
 
   constructor(
-    private readonly discordMessageService: DiscordMessageService,
     private readonly playbackService: PlaybackService,
     private readonly jellyfinWebSocketService: JellyfinWebSocketService,
     private readonly jellyfinStreamBuilder: JellyfinStreamBuilderService,
@@ -75,7 +73,7 @@ export class DiscordVoiceService implements OnModuleDestroy {
 
   tryJoinChannelAndEstablishVoiceConnection(
     member: GuildMember,
-  ): TryResult<InteractionReplyOptions> {
+  ): TryResult<InteractionEditReplyOptions> {
     if (this.voiceConnection !== undefined) {
       this.logger.debug(
         'Avoided joining the voice channel because voice connection is already defined',
@@ -94,7 +92,7 @@ export class DiscordVoiceService implements OnModuleDestroy {
         success: false,
         reply: {
           embeds: [
-            this.discordMessageService.buildMessage({
+            buildMessage({
               title: 'Unable to join your channel',
               description:
                 "I am unable to join your channel, because you don't seem to be in a voice channel. Connect to a channel first to use this command",
@@ -164,7 +162,7 @@ export class DiscordVoiceService implements OnModuleDestroy {
     };
   }
 
-  changeVolume(volume: number) {
+  changeCurrentResourceVolume(volume: number) {
     if (!this.audioResource || !this.audioResource.volume) {
       this.logger.error(
         'Failed to change audio volume, AudioResource or volume was undefined',
@@ -180,13 +178,14 @@ export class DiscordVoiceService implements OnModuleDestroy {
     );
     this.createAndReturnOrGetAudioPlayer().play(resource);
     this.audioResource = resource;
+    resource.volume?.setVolume(this.playbackService.getVolume());
 
     const isPlayable = this.audioPlayer?.checkPlayable();
     if (isPlayable) {
       return;
     }
     this.logger.warn(
-      `Current resource is is not playable. This means playback will get stuck. Please report this issue.`,
+      'Current resource is is not playable. This means playback will get stuck. Please report this issue.',
     );
   }
 
@@ -245,7 +244,7 @@ export class DiscordVoiceService implements OnModuleDestroy {
 
   /**
    * Checks if the current state is paused or not and toggles the states to the opposite.
-   * @returns The new paused state - true: paused, false: un-paused
+   * @returns The new paused state - true: paused, false: unpaused
    */
   @OnEvent('internal.voice.controls.togglePause')
   togglePaused(): boolean {
@@ -266,7 +265,7 @@ export class DiscordVoiceService implements OnModuleDestroy {
         success: false,
         reply: {
           embeds: [
-            this.discordMessageService.buildErrorMessage({
+            buildErrorMessage({
               title: 'Unable to disconnect from voice channel',
               description: 'I am currently not connected to any voice channels',
             }),

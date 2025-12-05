@@ -18,9 +18,10 @@ import {
   GuildMember,
   Interaction,
   InteractionReplyOptions,
+  MessageFlags,
 } from 'discord.js';
 
-import { DiscordMessageService } from '../../clients/discord/discord.message.service';
+import { buildMessage } from '../../clients/discord/discord.message.builder';
 import { DiscordVoiceService } from '../../clients/discord/discord.voice.service';
 import { JellyfinSearchService } from '../../clients/jellyfin/jellyfin.search.service';
 import { SearchItem } from '../../models/search/SearchItem';
@@ -41,7 +42,6 @@ export class PlayItemCommand {
 
   constructor(
     private readonly jellyfinSearchService: JellyfinSearchService,
-    private readonly discordMessageService: DiscordMessageService,
     private readonly discordVoiceService: DiscordVoiceService,
     private readonly playbackService: PlaybackService,
   ) {}
@@ -51,7 +51,7 @@ export class PlayItemCommand {
     @InteractionEvent(SlashCommandPipe) dto: PlayCommandParams,
     @IA() interaction: CommandInteraction,
   ) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const baseItems = PlayCommandParams.getBaseItemKinds(dto.type);
 
@@ -70,13 +70,13 @@ export class PlayItemCommand {
     if (!item) {
       await interaction.followUp({
         embeds: [
-          this.discordMessageService.buildMessage({
+          buildMessage({
             title: 'No results found',
             description:
               '- Check for any misspellings\n- Grant me access to your desired libraries\n- Avoid special characters',
           }),
         ],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -96,9 +96,7 @@ export class PlayItemCommand {
       return;
     }
 
-    const tracks = await (
-      await item.toTracks(this.jellyfinSearchService)
-    ).reverse();
+    const tracks = await item.toTracks(this.jellyfinSearchService);
     this.logger.debug(`Extracted ${tracks.length} tracks from the search item`);
     const reducedDuration = tracks.reduce(
       (sum, item) => sum + item.duration,
@@ -115,7 +113,7 @@ export class PlayItemCommand {
 
     await interaction.followUp({
       embeds: [
-        this.discordMessageService.buildMessage({
+        buildMessage({
           title: `Added ${
             tracks.length
           } tracks to your playlist (${formatMillisecondsAsHumanReadable(
@@ -129,7 +127,7 @@ export class PlayItemCommand {
           },
         }),
       ],
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
 

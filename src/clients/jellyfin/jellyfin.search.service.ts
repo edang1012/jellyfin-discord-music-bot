@@ -43,7 +43,7 @@ export class JellyfinSearchService {
     }
 
     try {
-      const { data, status } = await searchApi.get({
+      const { data, status } = await searchApi.getSearchHints({
         searchTerm,
         includeItemTypes,
         limit,
@@ -62,9 +62,18 @@ export class JellyfinSearchService {
         throw new Error('SearchHints were undefined');
       }
 
-      return SearchHints.map((hint) =>
-        this.transformToSearchHintFromHint(hint),
-      ).filter((x) => x !== null) as SearchItem[];
+      const searchItems: SearchItem[] = [];
+      for (const hint of SearchHints) {
+        try {
+          const searchItem = this.transformToSearchHintFromHint(hint);
+          if (searchItem instanceof SearchItem) searchItems.push(searchItem);
+        } catch (err) {
+          this.logger.warn(
+            `Failed to include an item in the search results for ${searchTerm}: ${hint}`,
+          );
+        }
+      }
+      return searchItems;
     } catch (err) {
       this.logger.error(`Failed to search on Jellyfin: ${err}`);
       return [];
@@ -102,7 +111,7 @@ export class JellyfinSearchService {
   async getAlbumItems(albumId: string): Promise<SearchItem[]> {
     const api = this.jellyfinService.getApi();
     const searchApi = getSearchApi(api);
-    const axiosResponse = await searchApi.get({
+    const axiosResponse = await searchApi.getSearchHints({
       parentId: albumId,
       userId: this.jellyfinService.getUserId(),
       mediaTypes: [BaseItemKind[BaseItemKind.Audio]],
@@ -123,9 +132,9 @@ export class JellyfinSearchService {
       return [];
     }
 
-    return [...axiosResponse.data.SearchHints]
-      .reverse()
-      .map((hint) => SearchItem.constructFromHint(hint));
+    return [...axiosResponse.data.SearchHints].map((hint) =>
+      SearchItem.constructFromHint(hint),
+    );
   }
 
   async getById(
@@ -220,7 +229,7 @@ export class JellyfinSearchService {
       const response = await searchApi.getItems({
         includeItemTypes: [BaseItemKind.Audio],
         limit,
-        sortBy: ['random'],
+        sortBy: ['Random'],
         userId: this.jellyfinService.getUserId(),
         recursive: true,
       });
